@@ -1,7 +1,9 @@
+export const OFFICIAL_WHATSAPP_NUMBER = "557182124447";
+
 export const SHOP = {
   name: "Tortas e Doces da Liu",
   tagline: "Confeitaria artesanal feita com carinho",
-  whatsapp: "5571999999999", // TODO: substituir pelo número real (com DDI 55 + DDD)
+  whatsapp: OFFICIAL_WHATSAPP_NUMBER,
   baseCep: "40226-580",
   deliveryArea: "Da Barra ao Rio Vermelho e redondezas (Salvador-BA)",
 };
@@ -159,6 +161,17 @@ export function formatBRL(value: number): string {
 
 export function onlyDigits(value: string): string {
   return value.replace(/\D/g, "");
+}
+
+export function getShopWhatsappNumber(): string {
+  return onlyDigits(SHOP.whatsapp);
+}
+
+export function buildWhatsappUrl(message?: string): string {
+  const number = getShopWhatsappNumber();
+  const encodedMessage = message ? `?text=${encodeURIComponent(message)}` : "";
+
+  return `https://wa.me/${number}${encodedMessage}`;
 }
 
 export function formatCep(value: string): string {

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Clock, Heart, MapPin, ShoppingBag, Truck } from "lucide-react";
 import heroImg from "@/assets/hero.jpg";
-import { DELIVERY_ZONES, SHOP, formatBRL } from "@/lib/shop";
+import { DELIVERY_ZONES, buildWhatsappUrl, formatBRL } from "@/lib/shop";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -58,7 +58,7 @@ function Home() {
                 Ver cardápio <ArrowRight className="h-6 w-6" />
               </Link>
               <a
-                href={`https://wa.me/${SHOP.whatsapp}`}
+                href={buildWhatsappUrl()}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex min-h-16 items-center justify-center gap-3 rounded-lg border-2 border-background bg-background px-8 py-5 text-xl font-semibold text-primary transition hover:bg-secondary"

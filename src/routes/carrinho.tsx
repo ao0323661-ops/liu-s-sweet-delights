@@ -17,6 +17,7 @@ import { useCart } from "@/lib/cart";
 import {
   DELIVERY_NEIGHBORHOODS,
   SHOP,
+  buildWhatsappUrl,
   findSupportedNeighborhood,
   formatBRL,
   formatCep,
@@ -180,8 +181,7 @@ function Carrinho() {
   function finish() {
     if (!canFinish) return;
 
-    const msg = encodeURIComponent(buildMessage());
-    const url = `https://wa.me/${SHOP.whatsapp}?text=${msg}`;
+    const url = buildWhatsappUrl(buildMessage());
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
