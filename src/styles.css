@@ -38,38 +38,35 @@
 }
 
 :root {
-  --radius: 0.75rem;
+  --radius: 0.5rem;
 
-  /* Warm artisanal palette */
-  --background: oklch(0.975 0.012 80);
-  --foreground: oklch(0.22 0.03 40);
+  --background: oklch(0.985 0.004 100);
+  --foreground: oklch(0.2 0.025 35);
 
-  --card: oklch(0.99 0.008 85);
-  --card-foreground: oklch(0.22 0.03 40);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.025 35);
 
-  --popover: oklch(0.99 0.008 85);
-  --popover-foreground: oklch(0.22 0.03 40);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.025 35);
 
-  /* Burgundy / terracotta */
-  --primary: oklch(0.42 0.12 30);
-  --primary-foreground: oklch(0.98 0.01 80);
+  --primary: oklch(0.39 0.13 20);
+  --primary-foreground: oklch(0.99 0.004 100);
 
-  --secondary: oklch(0.93 0.025 75);
-  --secondary-foreground: oklch(0.28 0.04 40);
+  --secondary: oklch(0.93 0.035 145);
+  --secondary-foreground: oklch(0.24 0.04 145);
 
-  --muted: oklch(0.94 0.018 80);
-  --muted-foreground: oklch(0.45 0.03 50);
+  --muted: oklch(0.94 0.01 100);
+  --muted-foreground: oklch(0.42 0.025 40);
 
-  /* Warm gold */
-  --accent: oklch(0.78 0.12 75);
-  --accent-foreground: oklch(0.22 0.03 40);
+  --accent: oklch(0.82 0.08 72);
+  --accent-foreground: oklch(0.2 0.025 35);
 
   --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.98 0.01 80);
+  --destructive-foreground: oklch(0.99 0.004 100);
 
-  --border: oklch(0.88 0.02 70);
-  --input: oklch(0.9 0.02 70);
-  --ring: oklch(0.42 0.12 30);
+  --border: oklch(0.88 0.012 95);
+  --input: oklch(0.84 0.014 95);
+  --ring: oklch(0.39 0.13 20);
 }
 
 @layer base {
@@ -79,8 +76,8 @@
 
   html {
     font-family: var(--font-sans);
-    /* Larger base size for elderly-friendly reading */
     font-size: 18px;
+    scroll-behavior: smooth;
   }
 
   body {
@@ -88,17 +85,33 @@
     color: var(--color-foreground);
     font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+    min-width: 320px;
   }
 
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     font-family: var(--font-serif);
     font-weight: 500;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
   }
-}
 
-@utility paper-texture {
-  background-image:
-    radial-gradient(oklch(0.42 0.12 30 / 0.04) 1px, transparent 1px);
-  background-size: 22px 22px;
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-ring);
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background-color: var(--color-accent);
+    color: var(--color-accent-foreground);
+  }
 }

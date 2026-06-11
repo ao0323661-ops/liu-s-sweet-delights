@@ -47,12 +47,8 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="font-serif text-2xl text-foreground">
-          Algo deu errado
-        </h1>
-        <p className="mt-2 text-base text-muted-foreground">
-          Tente novamente em instantes.
-        </p>
+        <h1 className="font-serif text-2xl text-foreground">Algo deu errado</h1>
+        <p className="mt-2 text-base text-muted-foreground">Tente novamente em instantes.</p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -90,8 +86,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "Tortas e Doces da Liu" },
       {
         property: "og:description",
-        content:
-          "Confeitaria artesanal: tortas, quiches, bolos e doces feitos com carinho.",
+        content: "Confeitaria artesanal: tortas, quiches, bolos e doces feitos com carinho.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

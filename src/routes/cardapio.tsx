@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { ShoppingBag } from "lucide-react";
+import { ArrowRight, ShoppingBag } from "lucide-react";
 import { CATEGORIES } from "@/lib/shop";
 import { ProductCard } from "@/components/ProductCard";
 import { useCart } from "@/lib/cart";
@@ -39,29 +39,34 @@ function Cardapio() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-5 pb-16 pt-10">
+    <div className="mx-auto max-w-6xl px-5 pb-32 pt-8 sm:pt-10">
       <header className="mb-8">
-        <h1 className="font-serif text-5xl text-foreground sm:text-6xl">
+        <p className="text-lg font-semibold text-primary">Cardápio artesanal</p>
+        <h1 className="mt-2 font-serif text-5xl leading-tight text-foreground sm:text-6xl">
           Cardápio
         </h1>
-        <p className="mt-2 text-lg text-muted-foreground">
-          Escolha os seus favoritos e adicione ao pedido.
+        <p className="mt-3 max-w-3xl text-xl leading-relaxed text-muted-foreground">
+          Escolha os seus favoritos, ajuste quantidade e tamanho quando houver. Depois revise tudo
+          no carrinho antes de enviar pelo WhatsApp.
         </p>
       </header>
 
-      {/* Sticky category nav */}
-      <nav className="sticky top-[76px] z-20 -mx-5 mb-8 border-y border-border bg-background/90 px-5 py-3 backdrop-blur">
-        <div className="flex gap-2 overflow-x-auto pb-1">
+      <nav
+        className="sticky top-[76px] z-20 -mx-5 mb-10 border-y border-border bg-background/95 px-5 py-3 backdrop-blur"
+        aria-label="Categorias do cardápio"
+      >
+        <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto pb-1">
           {CATEGORIES.map((c) => (
             <button
               key={c.id}
               type="button"
               onClick={() => scrollTo(c.id)}
-              className={`shrink-0 rounded-full border px-5 py-2.5 text-base transition ${
+              className={`min-h-12 shrink-0 rounded-lg border px-5 py-2.5 text-lg font-medium transition ${
                 active === c.id
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border bg-card text-foreground hover:border-primary"
               }`}
+              aria-current={active === c.id ? "true" : undefined}
             >
               {c.title}
             </button>
@@ -73,10 +78,8 @@ function Cardapio() {
         {CATEGORIES.map((c) => (
           <section key={c.id} id={`cat-${c.id}`} className="scroll-mt-36">
             <div className="mb-5">
-              <h2 className="font-serif text-3xl text-foreground sm:text-4xl">
-                {c.title}
-              </h2>
-              <p className="mt-1 text-base text-muted-foreground">{c.blurb}</p>
+              <h2 className="font-serif text-4xl text-foreground sm:text-5xl">{c.title}</h2>
+              <p className="mt-2 text-xl leading-relaxed text-muted-foreground">{c.blurb}</p>
             </div>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {c.products.map((p) => (
@@ -90,13 +93,15 @@ function Cardapio() {
       {count > 0 && (
         <Link
           to="/carrinho"
-          className="fixed bottom-5 left-1/2 z-40 inline-flex -translate-x-1/2 items-center gap-3 rounded-full bg-primary px-7 py-4 text-lg font-medium text-primary-foreground shadow-xl transition hover:brightness-110"
+          className="fixed bottom-4 left-4 right-4 z-40 inline-flex min-h-16 items-center justify-center gap-3 rounded-lg bg-primary px-6 py-4 text-xl font-semibold text-primary-foreground shadow-xl transition hover:brightness-110 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:px-8"
+          aria-label={`Ver carrinho com ${count} ${count === 1 ? "item" : "itens"}`}
         >
           <ShoppingBag className="h-5 w-5" />
           Ver pedido
-          <span className="grid h-7 min-w-7 place-items-center rounded-full bg-background px-2 text-sm font-semibold text-primary">
+          <span className="grid h-8 min-w-8 place-items-center rounded-md bg-background px-2 text-base font-bold text-primary">
             {count}
           </span>
+          <ArrowRight className="h-5 w-5" />
         </Link>
       )}
     </div>

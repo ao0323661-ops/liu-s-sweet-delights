@@ -1,8 +1,28 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { Minus, Plus, Trash2, MessageCircle, ArrowLeft } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  Home,
+  MessageCircle,
+  Minus,
+  Plus,
+  Store,
+  Trash2,
+  Truck,
+  type LucideIcon,
+} from "lucide-react";
 import { useCart } from "@/lib/cart";
-import { SHOP, formatBRL } from "@/lib/shop";
+import {
+  DELIVERY_NEIGHBORHOODS,
+  SHOP,
+  findSupportedNeighborhood,
+  formatBRL,
+  formatCep,
+  getDeliveryValidation,
+  onlyDigits,
+} from "@/lib/shop";
 
 export const Route = createFileRoute("/carrinho")({
   head: () => ({
@@ -19,68 +39,142 @@ export const Route = createFileRoute("/carrinho")({
 });
 
 type Mode = "retirada" | "entrega";
+type CepLookupStatus = "idle" | "loading" | "found" | "not-found" | "error";
 
 function Carrinho() {
-  const { items, setQty, remove, subtotal, clear } = useCart();
+  const { items, setQty, remove, subtotal, clear, count } = useCart();
   const [mode, setMode] = useState<Mode>("retirada");
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [cep, setCep] = useState("");
   const [bairro, setBairro] = useState("");
+  const [detectedBairro, setDetectedBairro] = useState("");
   const [endereco, setEndereco] = useState("");
+  const [referencia, setReferencia] = useState("");
   const [obs, setObs] = useState("");
+  const [cepLookupStatus, setCepLookupStatus] = useState<CepLookupStatus>("idle");
+
+  const deliveryCheck = useMemo(
+    () => (mode === "entrega" ? getDeliveryValidation({ cep, bairro }) : undefined),
+    [mode, cep, bairro],
+  );
 
   const deliveryFee = mode === "entrega" ? SHOP.deliveryFee : 0;
   const total = subtotal + deliveryFee;
 
-  const canFinish = useMemo(() => {
-    if (items.length === 0) return false;
-    if (!nome.trim()) return false;
+  const finishHelp = useMemo(() => {
+    if (!nome.trim()) return "Informe seu nome para finalizar.";
     if (mode === "entrega") {
-      if (!cep.trim() || !bairro.trim() || !endereco.trim()) return false;
+      if (!deliveryCheck?.ok) {
+        return deliveryCheck?.message ?? "Confirme CEP e bairro de entrega.";
+      }
+      if (!endereco.trim()) return "Informe rua, número e complemento.";
     }
-    return true;
-  }, [items.length, nome, mode, cep, bairro, endereco]);
+    return "";
+  }, [nome, mode, deliveryCheck, endereco]);
+
+  const canFinish = items.length > 0 && !finishHelp;
+
+  useEffect(() => {
+    if (mode !== "entrega") {
+      setCepLookupStatus("idle");
+      setDetectedBairro("");
+      return;
+    }
+
+    const digits = onlyDigits(cep);
+    if (digits.length !== 8) {
+      setCepLookupStatus("idle");
+      setDetectedBairro("");
+      return;
+    }
+
+    const controller = new AbortController();
+    setCepLookupStatus("loading");
+
+    fetch(`https://viacep.com.br/ws/${digits}/json/`, {
+      signal: controller.signal,
+    })
+      .then((response) => response.json())
+      .then((data: { erro?: boolean; bairro?: string; logradouro?: string }) => {
+        if (data.erro) {
+          setCepLookupStatus("not-found");
+          setDetectedBairro("");
+          return;
+        }
+
+        const supportedNeighborhood = data.bairro
+          ? findSupportedNeighborhood(data.bairro)
+          : undefined;
+
+        setDetectedBairro(data.bairro ?? "");
+        if (supportedNeighborhood) setBairro(supportedNeighborhood);
+        if (data.logradouro) {
+          setEndereco((current) => current || data.logradouro || "");
+        }
+        setCepLookupStatus("found");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        setCepLookupStatus("error");
+      });
+
+    return () => controller.abort();
+  }, [cep, mode]);
 
   function buildMessage(): string {
     const lines: string[] = [];
-    lines.push(`*Novo pedido — ${SHOP.name}*`);
+    lines.push(`*Novo pedido - ${SHOP.name}*`);
     lines.push("");
-    lines.push(`*Cliente:* ${nome}`);
-    if (telefone) lines.push(`*Telefone:* ${telefone}`);
+    lines.push("*Cliente*");
+    lines.push(`Nome: ${nome.trim()}`);
+    if (telefone.trim()) lines.push(`Telefone: ${telefone.trim()}`);
     lines.push("");
-    lines.push("*Itens:*");
-    items.forEach((i) => {
-      const size = i.sizeLabel ? ` (${i.sizeLabel})` : "";
+    lines.push("*Itens*");
+    items.forEach((item) => {
+      const size = item.sizeLabel ? ` (${item.sizeLabel})` : "";
       lines.push(
-        `• ${i.qty}x ${i.name}${size} — ${formatBRL(i.unitPrice * i.qty)}`,
+        `- ${item.qty}x ${item.name}${size} | ${formatBRL(
+          item.unitPrice,
+        )} cada | ${formatBRL(item.unitPrice * item.qty)}`,
       );
     });
     lines.push("");
-    lines.push(`*Subtotal:* ${formatBRL(subtotal)}`);
+    lines.push("*Resumo*");
+    lines.push(`Subtotal: ${formatBRL(subtotal)}`);
     if (mode === "entrega") {
-      lines.push(`*Taxa de entrega:* ${formatBRL(deliveryFee)}`);
-    }
-    lines.push(`*Total:* ${formatBRL(total)}`);
-    lines.push("");
-    if (mode === "retirada") {
-      lines.push("*Modalidade:* Retirada no local");
+      lines.push(`Taxa de entrega: ${formatBRL(deliveryFee)}`);
     } else {
-      lines.push("*Modalidade:* Entrega");
-      lines.push(`*CEP:* ${cep}`);
-      lines.push(`*Bairro:* ${bairro}`);
-      lines.push(`*Endereço:* ${endereco}`);
+      lines.push("Taxa de entrega: Retirada no local");
+    }
+    lines.push(`Total: ${formatBRL(total)}`);
+    lines.push("");
+    lines.push("*Recebimento*");
+    if (mode === "retirada") {
+      lines.push("Retirada no local");
+    } else {
+      lines.push("Delivery");
+      lines.push(`CEP: ${cep}`);
+      lines.push(`Bairro: ${deliveryCheck?.neighborhood ?? bairro}`);
+      lines.push(`Endereço: ${endereco.trim()}`);
+      if (referencia.trim()) lines.push(`Referência: ${referencia.trim()}`);
+      lines.push(`Área validada: ${deliveryCheck?.message ?? "Pendente"}`);
     }
     if (obs.trim()) {
       lines.push("");
-      lines.push(`*Observações:* ${obs}`);
+      lines.push("*Observações*");
+      lines.push(obs.trim());
     }
     lines.push("");
-    lines.push("_Aguardo a confirmação e as instruções de pagamento._");
+    lines.push("Aguardo a confirmação e as instruções de pagamento.");
     return lines.join("\n");
   }
 
   function finish() {
+    if (!canFinish) return;
+
     const msg = encodeURIComponent(buildMessage());
     const url = `https://wa.me/${SHOP.whatsapp}?text=${msg}`;
     window.open(url, "_blank", "noopener,noreferrer");
@@ -89,13 +183,18 @@ function Carrinho() {
   if (items.length === 0) {
     return (
       <div className="mx-auto max-w-2xl px-5 py-16 text-center">
-        <h1 className="font-serif text-5xl text-foreground">Seu pedido está vazio</h1>
-        <p className="mt-3 text-lg text-muted-foreground">
-          Que tal escolher uma delícia no cardápio?
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-lg bg-secondary text-primary">
+          <Store className="h-8 w-8" />
+        </div>
+        <h1 className="mt-5 font-serif text-5xl leading-tight text-foreground">
+          Seu pedido está vazio
+        </h1>
+        <p className="mt-3 text-xl leading-relaxed text-muted-foreground">
+          Escolha uma delícia no cardápio para montar seu pedido.
         </p>
         <Link
           to="/cardapio"
-          className="mt-8 inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-8 py-5 text-xl font-medium text-primary-foreground shadow-md transition hover:brightness-110"
+          className="mt-8 inline-flex min-h-16 items-center justify-center gap-2 rounded-lg bg-primary px-8 py-5 text-xl font-semibold text-primary-foreground shadow-md transition hover:brightness-110"
         >
           Ver cardápio
         </Link>
@@ -104,251 +203,437 @@ function Carrinho() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-5 pb-16 pt-8">
+    <div className="mx-auto max-w-6xl px-5 pb-16 pt-8">
       <Link
         to="/cardapio"
-        className="inline-flex items-center gap-2 text-base text-muted-foreground hover:text-primary"
+        className="inline-flex min-h-11 items-center gap-2 text-lg font-medium text-muted-foreground hover:text-primary"
       >
-        <ArrowLeft className="h-4 w-4" /> Continuar comprando
+        <ArrowLeft className="h-5 w-5" /> Continuar comprando
       </Link>
 
-      <h1 className="mt-3 font-serif text-5xl text-foreground sm:text-6xl">
-        Seu pedido
-      </h1>
+      <header className="mt-5">
+        <p className="text-lg font-semibold text-primary">Carrinho</p>
+        <h1 className="mt-2 font-serif text-5xl leading-tight text-foreground sm:text-6xl">
+          Revise seu pedido
+        </h1>
+        <p className="mt-3 max-w-3xl text-xl leading-relaxed text-muted-foreground">
+          Confira os itens, escolha retirada ou delivery e envie tudo pronto para o WhatsApp da Liu.
+        </p>
+      </header>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
-        {/* ITEMS */}
-        <section className="space-y-4">
-          {items.map((i) => (
-            <article
-              key={i.key}
-              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm"
-            >
-              <div className="min-w-0">
-                <h3 className="truncate font-serif text-2xl text-foreground">
-                  {i.name}
-                </h3>
-                {i.sizeLabel && (
-                  <p className="text-base text-muted-foreground">
-                    Tamanho: {i.sizeLabel}
-                  </p>
-                )}
-                <p className="mt-1 text-base text-primary">
-                  {formatBRL(i.unitPrice)} cada
-                </p>
-              </div>
-
-              <div className="flex flex-col items-end gap-3">
-                <div className="flex items-center gap-1 rounded-full border border-border bg-background p-1">
-                  <button
-                    type="button"
-                    onClick={() => setQty(i.key, i.qty - 1)}
-                    className="grid h-10 w-10 place-items-center rounded-full text-foreground hover:bg-secondary"
-                    aria-label="Diminuir"
-                  >
-                    <Minus className="h-4 w-4" />
-                  </button>
-                  <span className="w-8 text-center text-lg font-medium">
-                    {i.qty}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setQty(i.key, i.qty + 1)}
-                    className="grid h-10 w-10 place-items-center rounded-full text-foreground hover:bg-secondary"
-                    aria-label="Aumentar"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => remove(i.key)}
-                  className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" /> Remover
-                </button>
-              </div>
-            </article>
-          ))}
-
-          <button
-            type="button"
-            onClick={clear}
-            className="text-sm text-muted-foreground underline-offset-4 hover:text-destructive hover:underline"
-          >
-            Esvaziar pedido
-          </button>
-        </section>
-
-        {/* CHECKOUT */}
-        <aside className="space-y-6">
-          {/* Mode */}
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <h2 className="font-serif text-2xl">Como você prefere receber?</h2>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              {(["retirada", "entrega"] as Mode[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMode(m)}
-                  className={`rounded-xl border px-4 py-4 text-base font-medium transition ${
-                    mode === m
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background text-foreground hover:border-primary"
-                  }`}
-                >
-                  {m === "retirada" ? "Retirar no local" : "Entrega"}
-                </button>
-              ))}
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.8fr)] lg:items-start">
+        <section aria-labelledby="itens-heading">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 id="itens-heading" className="font-serif text-4xl">
+                Itens escolhidos
+              </h2>
+              <p className="mt-1 text-lg text-muted-foreground">
+                {count} {count === 1 ? "item" : "itens"} no pedido
+              </p>
             </div>
-
-            {mode === "entrega" && (
-              <div className="mt-4 rounded-xl bg-accent/30 p-4 text-sm text-foreground">
-                Atendemos a região {SHOP.deliveryArea}.<br />
-                CEP base: <strong>{SHOP.baseCep}</strong>.
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={clear}
+              className="inline-flex min-h-11 items-center rounded-lg border border-border bg-background px-4 py-2 text-base font-semibold text-muted-foreground transition hover:border-destructive hover:text-destructive"
+            >
+              Esvaziar pedido
+            </button>
           </div>
 
-          {/* Form */}
-          <div className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <h2 className="font-serif text-2xl">Seus dados</h2>
+          <div className="space-y-4">
+            {items.map((item) => (
+              <article
+                key={item.key}
+                className="grid gap-4 rounded-lg border border-border bg-card p-5 shadow-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              >
+                <div className="min-w-0">
+                  <h3 className="font-serif text-3xl leading-tight text-foreground">{item.name}</h3>
+                  {item.sizeLabel && (
+                    <p className="mt-1 text-lg text-muted-foreground">Tamanho: {item.sizeLabel}</p>
+                  )}
+                  <p className="mt-2 text-lg font-semibold text-primary">
+                    {formatBRL(item.unitPrice)} cada
+                  </p>
+                </div>
 
-            <Field label="Seu nome" value={nome} onChange={setNome} required />
+                <div className="flex flex-wrap items-center justify-between gap-4 sm:flex-col sm:items-end">
+                  <div className="flex items-center rounded-lg border border-border bg-background p-1">
+                    <button
+                      type="button"
+                      onClick={() => setQty(item.key, item.qty - 1)}
+                      className="grid h-12 w-12 place-items-center rounded-md text-foreground transition hover:bg-secondary"
+                      aria-label={`Diminuir quantidade de ${item.name}`}
+                    >
+                      <Minus className="h-5 w-5" />
+                    </button>
+                    <span className="w-12 text-center text-2xl font-semibold">{item.qty}</span>
+                    <button
+                      type="button"
+                      onClick={() => setQty(item.key, item.qty + 1)}
+                      className="grid h-12 w-12 place-items-center rounded-md text-foreground transition hover:bg-secondary"
+                      aria-label={`Aumentar quantidade de ${item.name}`}
+                    >
+                      <Plus className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-serif text-3xl text-primary">
+                      {formatBRL(item.unitPrice * item.qty)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => remove(item.key)}
+                      className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-base font-medium text-muted-foreground transition hover:bg-secondary hover:text-destructive"
+                    >
+                      <Trash2 className="h-5 w-5" /> Remover
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <aside className="space-y-5 lg:sticky lg:top-28">
+          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <h2 className="font-serif text-3xl">Recebimento</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <ModeButton
+                active={mode === "retirada"}
+                icon={Home}
+                title="Retirada"
+                text="Buscar no local"
+                onClick={() => setMode("retirada")}
+              />
+              <ModeButton
+                active={mode === "entrega"}
+                icon={Truck}
+                title="Delivery"
+                text={SHOP.deliveryArea}
+                onClick={() => setMode("entrega")}
+              />
+            </div>
+          </section>
+
+          <section className="space-y-4 rounded-lg border border-border bg-card p-5 shadow-sm">
+            <h2 className="font-serif text-3xl">Dados do pedido</h2>
             <Field
-              label="Telefone (opcional)"
+              id="nome"
+              label="Seu nome"
+              value={nome}
+              onChange={setNome}
+              autoComplete="name"
+              required
+            />
+            <Field
+              id="telefone"
+              label="Telefone"
               value={telefone}
               onChange={setTelefone}
               inputMode="tel"
+              autoComplete="tel"
               placeholder="(71) 9 0000-0000"
             />
 
             {mode === "entrega" && (
               <>
                 <Field
+                  id="cep"
                   label="CEP"
                   value={cep}
-                  onChange={setCep}
+                  onChange={(value) => setCep(formatCep(value))}
                   inputMode="numeric"
+                  autoComplete="postal-code"
                   placeholder="40000-000"
+                  maxLength={9}
                   required
                 />
-                <Field
+                <SelectField
+                  id="bairro"
                   label="Bairro"
                   value={bairro}
                   onChange={setBairro}
+                  options={[...DELIVERY_NEIGHBORHOODS]}
+                  placeholder="Selecione o bairro"
+                  required
+                />
+                <DeliveryNotice
+                  status={cepLookupStatus}
+                  detectedBairro={detectedBairro}
+                  message={deliveryCheck?.message}
+                  ok={deliveryCheck?.ok}
+                />
+                <Field
+                  id="endereco"
+                  label="Endereço"
+                  value={endereco}
+                  onChange={setEndereco}
+                  autoComplete="street-address"
+                  placeholder="Rua, número e complemento"
                   required
                 />
                 <Field
-                  label="Endereço (rua, número, complemento)"
-                  value={endereco}
-                  onChange={setEndereco}
-                  required
+                  id="referencia"
+                  label="Ponto de referência"
+                  value={referencia}
+                  onChange={setReferencia}
+                  placeholder="Ex.: portaria, prédio, casa azul"
                 />
               </>
             )}
 
-            <div>
-              <label className="mb-1 block text-base font-medium text-foreground">
-                Observações
-              </label>
-              <textarea
-                value={obs}
-                onChange={(e) => setObs(e.target.value)}
-                rows={3}
-                className="w-full rounded-xl border border-input bg-background px-4 py-3 text-lg text-foreground outline-none focus:border-primary"
-                placeholder="Algum detalhe que devamos saber?"
-              />
-            </div>
-          </div>
+            <TextareaField
+              id="obs"
+              label="Observações"
+              value={obs}
+              onChange={setObs}
+              placeholder="Algum detalhe que a Liu precisa saber?"
+            />
+          </section>
 
-          {/* Totals */}
-          <div className="space-y-3 rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <section className="space-y-4 rounded-lg border border-border bg-card p-5 shadow-sm">
+            <h2 className="font-serif text-3xl">Resumo</h2>
             <Row label="Subtotal" value={formatBRL(subtotal)} />
             <Row
-              label={
-                mode === "entrega" ? "Taxa de entrega" : "Retirada no local"
-              }
+              label={mode === "entrega" ? "Entrega" : "Retirada"}
               value={mode === "entrega" ? formatBRL(deliveryFee) : "Grátis"}
             />
-            <div className="border-t border-border pt-3" />
-            <Row
-              label="Total"
-              value={formatBRL(total)}
-              bold
-            />
+            <div className="border-t border-border pt-4" />
+            <Row label="Total" value={formatBRL(total)} bold />
 
             <button
               type="button"
               disabled={!canFinish}
               onClick={finish}
-              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-5 text-xl font-medium text-primary-foreground shadow-md transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex min-h-16 w-full items-center justify-center gap-3 rounded-lg bg-primary px-6 py-5 text-xl font-semibold text-primary-foreground shadow-md transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55"
             >
               <MessageCircle className="h-6 w-6" />
-              Finalizar pelo WhatsApp
+              Enviar pedido no WhatsApp
             </button>
-            <p className="text-center text-sm text-muted-foreground">
-              O pagamento será enviado pela Liu após a confirmação do pedido.
+            <p
+              className={`text-center text-base ${
+                finishHelp ? "text-destructive" : "text-muted-foreground"
+              }`}
+              aria-live="polite"
+            >
+              {finishHelp || "O pagamento será combinado após a confirmação do pedido."}
             </p>
-          </div>
+          </section>
         </aside>
       </div>
     </div>
   );
 }
 
+function ModeButton({
+  active,
+  icon: Icon,
+  title,
+  text,
+  onClick,
+}: {
+  active: boolean;
+  icon: LucideIcon;
+  title: string;
+  text: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex min-h-20 items-start gap-3 rounded-lg border p-4 text-left transition ${
+        active
+          ? "border-primary bg-primary text-primary-foreground shadow-sm"
+          : "border-border bg-background text-foreground hover:border-primary"
+      }`}
+    >
+      <Icon className="mt-1 h-6 w-6 shrink-0" />
+      <span>
+        <span className="block text-xl font-semibold">{title}</span>
+        <span
+          className={`mt-1 block text-base leading-snug ${
+            active ? "text-primary-foreground/90" : "text-muted-foreground"
+          }`}
+        >
+          {text}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function DeliveryNotice({
+  status,
+  detectedBairro,
+  message,
+  ok,
+}: {
+  status: CepLookupStatus;
+  detectedBairro: string;
+  message?: string;
+  ok?: boolean;
+}) {
+  const isPositive = ok === true;
+  const Icon = isPositive ? CheckCircle2 : AlertCircle;
+  const statusText =
+    status === "loading"
+      ? "Consultando CEP..."
+      : status === "found" && detectedBairro
+        ? `CEP encontrado: ${detectedBairro}.`
+        : status === "not-found"
+          ? "Não encontramos esse CEP automaticamente."
+          : status === "error"
+            ? "Não foi possível consultar o CEP agora."
+            : "";
+
+  return (
+    <div
+      className={`rounded-lg border p-4 text-base leading-relaxed ${
+        isPositive
+          ? "border-primary/35 bg-secondary text-foreground"
+          : "border-destructive/30 bg-destructive/10 text-foreground"
+      }`}
+    >
+      <div className="flex gap-3">
+        <Icon
+          className={`mt-1 h-5 w-5 shrink-0 ${isPositive ? "text-primary" : "text-destructive"}`}
+        />
+        <div>
+          <p className="font-semibold">
+            {message ?? "Informe CEP e bairro para validar a entrega."}
+          </p>
+          {statusText && <p className="mt-1 text-muted-foreground">{statusText}</p>}
+          <p className="mt-1 text-muted-foreground">Atendemos {SHOP.deliveryArea}.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Field({
+  id,
   label,
   value,
   onChange,
   required,
   placeholder,
   inputMode,
+  autoComplete,
+  maxLength = 200,
 }: {
+  id: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
   required?: boolean;
   placeholder?: string;
   inputMode?: "text" | "tel" | "numeric" | "email";
+  autoComplete?: string;
+  maxLength?: number;
 }) {
   return (
     <div>
-      <label className="mb-1 block text-base font-medium text-foreground">
+      <label htmlFor={id} className="mb-2 block text-lg font-semibold text-foreground">
         {label} {required && <span className="text-primary">*</span>}
       </label>
       <input
+        id={id}
         type="text"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(event) => onChange(event.target.value)}
         inputMode={inputMode}
+        autoComplete={autoComplete}
         placeholder={placeholder}
-        maxLength={200}
-        className="w-full rounded-xl border border-input bg-background px-4 py-3 text-lg text-foreground outline-none focus:border-primary"
+        maxLength={maxLength}
+        required={required}
+        className="min-h-14 w-full rounded-lg border border-input bg-background px-4 py-3 text-xl text-foreground outline-none transition placeholder:text-muted-foreground/75 focus:border-primary focus:ring-2 focus:ring-ring/25"
       />
     </div>
   );
 }
 
-function Row({
+function SelectField({
+  id,
   label,
   value,
-  bold,
+  onChange,
+  options,
+  placeholder,
+  required,
 }: {
+  id: string;
   label: string;
   value: string;
-  bold?: boolean;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder: string;
+  required?: boolean;
 }) {
   return (
+    <div>
+      <label htmlFor={id} className="mb-2 block text-lg font-semibold text-foreground">
+        {label} {required && <span className="text-primary">*</span>}
+      </label>
+      <select
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+        className="min-h-14 w-full rounded-lg border border-input bg-background px-4 py-3 text-xl text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/25"
+      >
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function TextareaField({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-2 block text-lg font-semibold text-foreground">
+        {label}
+      </label>
+      <textarea
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={3}
+        className="w-full rounded-lg border border-input bg-background px-4 py-3 text-xl text-foreground outline-none transition placeholder:text-muted-foreground/75 focus:border-primary focus:ring-2 focus:ring-ring/25"
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+
+function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
     <div
-      className={`flex items-center justify-between ${
-        bold ? "text-xl font-semibold" : "text-base"
+      className={`flex items-start justify-between gap-4 ${
+        bold ? "text-2xl font-semibold" : "text-lg"
       }`}
     >
-      <span className={bold ? "font-serif text-2xl" : "text-muted-foreground"}>
-        {label}
-      </span>
-      <span className={bold ? "font-serif text-2xl text-primary" : ""}>
+      <span className={bold ? "font-serif text-3xl" : "text-muted-foreground"}>{label}</span>
+      <span className={`text-right ${bold ? "font-serif text-3xl text-primary" : ""}`}>
         {value}
       </span>
     </div>

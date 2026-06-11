@@ -7,6 +7,26 @@ export const SHOP = {
   deliveryArea: "Da Barra ao Rio Vermelho e redondezas (Salvador-BA)",
 };
 
+export const DELIVERY_NEIGHBORHOODS = [
+  "Barra",
+  "Graça",
+  "Vitória",
+  "Canela",
+  "Campo Grande",
+  "Garcia",
+  "Ondina",
+  "Chame-Chame",
+  "Jardim Apipema",
+  "Alto das Pombas",
+  "Federação",
+  "Garibaldi",
+  "Rio Vermelho",
+] as const;
+
+export const DELIVERY_CEP_PREFIXES = ["40", "41"] as const;
+
+export type DeliveryNeighborhood = (typeof DELIVERY_NEIGHBORHOODS)[number];
+
 export type Product = {
   id: string;
   name: string;
@@ -122,4 +142,75 @@ export function formatBRL(value: number): string {
     style: "currency",
     currency: "BRL",
   });
+}
+
+export function onlyDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+export function formatCep(value: string): string {
+  const digits = onlyDigits(value).slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+export function normalizeText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-zA-Z0-9\s-]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+export function isCepFormatValid(cep: string): boolean {
+  return onlyDigits(cep).length === 8;
+}
+
+export function isCepLikelyInSalvador(cep: string): boolean {
+  const digits = onlyDigits(cep);
+  return (
+    isCepFormatValid(digits) && DELIVERY_CEP_PREFIXES.some((prefix) => digits.startsWith(prefix))
+  );
+}
+
+export function findSupportedNeighborhood(value: string): DeliveryNeighborhood | undefined {
+  const normalized = normalizeText(value);
+  return DELIVERY_NEIGHBORHOODS.find((neighborhood) => normalizeText(neighborhood) === normalized);
+}
+
+export function getDeliveryValidation({ cep, bairro }: { cep: string; bairro: string }): {
+  ok: boolean;
+  message: string;
+  neighborhood?: DeliveryNeighborhood;
+} {
+  if (!isCepFormatValid(cep)) {
+    return {
+      ok: false,
+      message: "Informe um CEP com 8 números.",
+    };
+  }
+
+  if (!isCepLikelyInSalvador(cep)) {
+    return {
+      ok: false,
+      message: "O CEP informado parece estar fora de Salvador.",
+    };
+  }
+
+  const neighborhood = findSupportedNeighborhood(bairro);
+
+  if (!neighborhood) {
+    return {
+      ok: false,
+      message: "Escolha um bairro atendido para delivery.",
+    };
+  }
+
+  return {
+    ok: true,
+    message: `Entrega disponível para ${neighborhood}.`,
+    neighborhood,
+  };
 }
