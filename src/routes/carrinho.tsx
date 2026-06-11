@@ -15,7 +15,7 @@ export const Route = createFileRoute("/carrinho")({
       },
     ],
   }),
-  component: Carrinho;
+  component: Carrinho,
 });
 
 type Mode = "retirada" | "entrega";
