@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Clock, Heart, MapPin, ShoppingBag, Truck } from "lucide-react";
 import heroImg from "@/assets/hero.jpg";
-import { DELIVERY_NEIGHBORHOODS, SHOP } from "@/lib/shop";
+import { DELIVERY_ZONES, SHOP, formatBRL } from "@/lib/shop";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -128,18 +128,26 @@ function Home() {
               Delivery da Barra ao Rio Vermelho
             </h2>
             <p className="mt-3 text-xl leading-relaxed text-muted-foreground">
-              Também atendemos bairros próximos selecionados. No carrinho, o site valida CEP e
-              bairro antes de liberar o envio.
+              Também atendemos bairros próximos selecionados. No carrinho, o site valida CEP, bairro
+              e calcula a taxa correta antes de liberar o envio.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {DELIVERY_NEIGHBORHOODS.map((bairro) => (
-              <span
-                key={bairro}
-                className="rounded-lg border border-border bg-background px-4 py-3 text-lg font-medium text-foreground"
+          <div className="grid gap-3">
+            {DELIVERY_ZONES.map((zone) => (
+              <div
+                key={zone.id}
+                className="rounded-lg border border-border bg-background p-4 text-foreground"
               >
-                {bairro}
-              </span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-serif text-3xl">{zone.label}</h3>
+                  <span className="rounded-lg bg-primary px-3 py-2 text-lg font-semibold text-primary-foreground">
+                    {formatBRL(zone.fee)}
+                  </span>
+                </div>
+                <p className="mt-2 text-base leading-relaxed text-muted-foreground">
+                  {zone.neighborhoods.join(", ")}
+                </p>
+              </div>
             ))}
           </div>
         </div>

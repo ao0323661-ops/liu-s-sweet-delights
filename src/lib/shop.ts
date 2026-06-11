@@ -2,30 +2,43 @@ export const SHOP = {
   name: "Tortas e Doces da Liu",
   tagline: "Confeitaria artesanal feita com carinho",
   whatsapp: "5571999999999", // TODO: substituir pelo número real (com DDI 55 + DDD)
-  deliveryFee: 12, // R$ — taxa fixa configurável
   baseCep: "40226-580",
   deliveryArea: "Da Barra ao Rio Vermelho e redondezas (Salvador-BA)",
 };
 
-export const DELIVERY_NEIGHBORHOODS = [
-  "Barra",
-  "Graça",
-  "Vitória",
-  "Canela",
-  "Campo Grande",
-  "Garcia",
-  "Ondina",
-  "Chame-Chame",
-  "Jardim Apipema",
-  "Alto das Pombas",
-  "Federação",
-  "Garibaldi",
-  "Rio Vermelho",
+export const DELIVERY_ZONES = [
+  {
+    id: "zona-1",
+    name: "Zona 1",
+    label: "Zona 1 — Próxima",
+    distanceLabel: "Próxima",
+    fee: 6,
+    neighborhoods: ["Barra", "Graça", "Vitória", "Canela", "Campo Grande"],
+  },
+  {
+    id: "zona-2",
+    name: "Zona 2",
+    label: "Zona 2 — Média",
+    distanceLabel: "Média",
+    fee: 8,
+    neighborhoods: ["Garcia", "Ondina", "Chame-Chame", "Jardim Apipema", "Alto das Pombas"],
+  },
+  {
+    id: "zona-3",
+    name: "Zona 3",
+    label: "Zona 3 — Mais distante",
+    distanceLabel: "Mais distante",
+    fee: 10,
+    neighborhoods: ["Federação", "Garibaldi", "Rio Vermelho"],
+  },
 ] as const;
+
+export const DELIVERY_NEIGHBORHOODS = DELIVERY_ZONES.flatMap((zone) => zone.neighborhoods);
 
 export const DELIVERY_CEP_PREFIXES = ["40", "41"] as const;
 
 export type DeliveryNeighborhood = (typeof DELIVERY_NEIGHBORHOODS)[number];
+export type DeliveryZone = (typeof DELIVERY_ZONES)[number];
 
 export type Product = {
   id: string;
@@ -180,10 +193,28 @@ export function findSupportedNeighborhood(value: string): DeliveryNeighborhood |
   return DELIVERY_NEIGHBORHOODS.find((neighborhood) => normalizeText(neighborhood) === normalized);
 }
 
+export function getDeliveryZoneForNeighborhood(
+  value: string,
+): { neighborhood: DeliveryNeighborhood; zone: DeliveryZone } | undefined {
+  const normalized = normalizeText(value);
+
+  for (const zone of DELIVERY_ZONES) {
+    const neighborhood = zone.neighborhoods.find((item) => normalizeText(item) === normalized);
+
+    if (neighborhood) {
+      return { neighborhood, zone };
+    }
+  }
+
+  return undefined;
+}
+
 export function getDeliveryValidation({ cep, bairro }: { cep: string; bairro: string }): {
   ok: boolean;
   message: string;
   neighborhood?: DeliveryNeighborhood;
+  zone?: DeliveryZone;
+  fee?: number;
 } {
   if (!isCepFormatValid(cep)) {
     return {
@@ -195,22 +226,31 @@ export function getDeliveryValidation({ cep, bairro }: { cep: string; bairro: st
   if (!isCepLikelyInSalvador(cep)) {
     return {
       ok: false,
-      message: "O CEP informado parece estar fora de Salvador.",
+      message: "No momento, não entregamos nessa região. Você pode escolher retirada no local.",
     };
   }
 
-  const neighborhood = findSupportedNeighborhood(bairro);
-
-  if (!neighborhood) {
+  if (!bairro.trim()) {
     return {
       ok: false,
       message: "Escolha um bairro atendido para delivery.",
     };
   }
 
+  const deliveryZone = getDeliveryZoneForNeighborhood(bairro);
+
+  if (!deliveryZone) {
+    return {
+      ok: false,
+      message: "No momento, não entregamos nessa região. Você pode escolher retirada no local.",
+    };
+  }
+
   return {
     ok: true,
-    message: `Entrega disponível para ${neighborhood}.`,
-    neighborhood,
+    message: `Entrega disponível para ${deliveryZone.neighborhood} (${deliveryZone.zone.label}).`,
+    neighborhood: deliveryZone.neighborhood,
+    zone: deliveryZone.zone,
+    fee: deliveryZone.zone.fee,
   };
 }

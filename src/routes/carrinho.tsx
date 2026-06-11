@@ -53,14 +53,16 @@ function Carrinho() {
   const [referencia, setReferencia] = useState("");
   const [obs, setObs] = useState("");
   const [cepLookupStatus, setCepLookupStatus] = useState<CepLookupStatus>("idle");
+  const deliveryBairro = detectedBairro || bairro;
 
   const deliveryCheck = useMemo(
-    () => (mode === "entrega" ? getDeliveryValidation({ cep, bairro }) : undefined),
-    [mode, cep, bairro],
+    () => (mode === "entrega" ? getDeliveryValidation({ cep, bairro: deliveryBairro }) : undefined),
+    [mode, cep, deliveryBairro],
   );
 
-  const deliveryFee = mode === "entrega" ? SHOP.deliveryFee : 0;
+  const deliveryFee = mode === "entrega" && deliveryCheck?.ok ? (deliveryCheck.fee ?? 0) : 0;
   const total = subtotal + deliveryFee;
+  const totalLabel = mode === "entrega" && !deliveryCheck?.ok ? "A confirmar" : formatBRL(total);
 
   const finishHelp = useMemo(() => {
     if (!nome.trim()) return "Informe seu nome para finalizar.";
@@ -145,6 +147,8 @@ function Carrinho() {
     lines.push("*Resumo*");
     lines.push(`Subtotal: ${formatBRL(subtotal)}`);
     if (mode === "entrega") {
+      lines.push(`Bairro: ${deliveryCheck?.neighborhood ?? deliveryBairro}`);
+      lines.push(`Zona de entrega: ${deliveryCheck?.zone?.label ?? "A confirmar"}`);
       lines.push(`Taxa de entrega: ${formatBRL(deliveryFee)}`);
     } else {
       lines.push("Taxa de entrega: Retirada no local");
@@ -157,7 +161,8 @@ function Carrinho() {
     } else {
       lines.push("Delivery");
       lines.push(`CEP: ${cep}`);
-      lines.push(`Bairro: ${deliveryCheck?.neighborhood ?? bairro}`);
+      lines.push(`Bairro: ${deliveryCheck?.neighborhood ?? deliveryBairro}`);
+      lines.push(`Zona: ${deliveryCheck?.zone?.label ?? "A confirmar"}`);
       lines.push(`Endereço: ${endereco.trim()}`);
       if (referencia.trim()) lines.push(`Referência: ${referencia.trim()}`);
       lines.push(`Área validada: ${deliveryCheck?.message ?? "Pendente"}`);
@@ -310,7 +315,7 @@ function Carrinho() {
                 active={mode === "entrega"}
                 icon={Truck}
                 title="Delivery"
-                text={SHOP.deliveryArea}
+                text="Taxa calculada por bairro"
                 onClick={() => setMode("entrega")}
               />
             </div>
@@ -342,7 +347,11 @@ function Carrinho() {
                   id="cep"
                   label="CEP"
                   value={cep}
-                  onChange={(value) => setCep(formatCep(value))}
+                  onChange={(value) => {
+                    setCep(formatCep(value));
+                    setBairro("");
+                    setDetectedBairro("");
+                  }}
                   inputMode="numeric"
                   autoComplete="postal-code"
                   placeholder="40000-000"
@@ -363,6 +372,8 @@ function Carrinho() {
                   detectedBairro={detectedBairro}
                   message={deliveryCheck?.message}
                   ok={deliveryCheck?.ok}
+                  zoneLabel={deliveryCheck?.zone?.label}
+                  fee={deliveryCheck?.fee}
                 />
                 <Field
                   id="endereco"
@@ -395,12 +406,23 @@ function Carrinho() {
           <section className="space-y-4 rounded-lg border border-border bg-card p-5 shadow-sm">
             <h2 className="font-serif text-3xl">Resumo</h2>
             <Row label="Subtotal" value={formatBRL(subtotal)} />
-            <Row
-              label={mode === "entrega" ? "Entrega" : "Retirada"}
-              value={mode === "entrega" ? formatBRL(deliveryFee) : "Grátis"}
-            />
+            {mode === "entrega" ? (
+              <>
+                <Row
+                  label="Bairro"
+                  value={(deliveryCheck?.neighborhood ?? deliveryBairro) || "A informar"}
+                />
+                <Row label="Zona de entrega" value={deliveryCheck?.zone?.label ?? "A confirmar"} />
+                <Row
+                  label="Taxa de entrega"
+                  value={deliveryCheck?.ok ? formatBRL(deliveryFee) : "A confirmar"}
+                />
+              </>
+            ) : (
+              <Row label="Retirada no local" value="Grátis" />
+            )}
             <div className="border-t border-border pt-4" />
-            <Row label="Total" value={formatBRL(total)} bold />
+            <Row label="Total final" value={totalLabel} bold />
 
             <button
               type="button"
@@ -470,11 +492,15 @@ function DeliveryNotice({
   detectedBairro,
   message,
   ok,
+  zoneLabel,
+  fee,
 }: {
   status: CepLookupStatus;
   detectedBairro: string;
   message?: string;
   ok?: boolean;
+  zoneLabel?: string;
+  fee?: number;
 }) {
   const isPositive = ok === true;
   const Icon = isPositive ? CheckCircle2 : AlertCircle;
@@ -505,6 +531,11 @@ function DeliveryNotice({
           <p className="font-semibold">
             {message ?? "Informe CEP e bairro para validar a entrega."}
           </p>
+          {isPositive && zoneLabel && typeof fee === "number" && (
+            <p className="mt-1 font-semibold text-primary">
+              {zoneLabel}. Taxa de entrega: {formatBRL(fee)}.
+            </p>
+          )}
           {statusText && <p className="mt-1 text-muted-foreground">{statusText}</p>}
           <p className="mt-1 text-muted-foreground">Atendemos {SHOP.deliveryArea}.</p>
         </div>
